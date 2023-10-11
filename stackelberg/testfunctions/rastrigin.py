@@ -13,10 +13,10 @@ def rastrigin_target(ix):
 class Rastrigin(om.ExplicitComponent):
     def initialize(self):
         self.options.declare('n_var',default=2,desc="number of variables")
-        self.options.declare('n_pop',default=100,desc="Number of populations")
+        self.options.declare('pop_size',default=100,desc="Number of populations")
         
     def setup(self):
-        m=self.options['n_pop']
+        m=self.options['pop_size']
         n=self.options['n_var']
         self.add_input('x',val=1,shape=(m,n))
         self.add_output('f1',val=1,shape=(m,1))

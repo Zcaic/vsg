@@ -20,11 +20,11 @@ class ZDT1(om.ExplicitComponent):
         self.options.declare(
             name="n_var", default=30, desc="The number of variables for the function"
         )
-        self.options.declare(name='n_pop',default=100,desc="Number of populations")
+        self.options.declare(name='pop_size',default=100,desc="Number of populations")
         self.options.declare(name='mpi',default=None,desc="Number of processes/ off")
     def setup(self):
         m=self.options['n_var']
-        n=self.options['n_pop']
+        n=self.options['pop_size']
         self.add_input(name="x", val=np.ones((n,m)))
         self.add_output(name="f1", val=np.ones((n,1)))
         self.add_output(name="f2", val=np.ones((n,1)))
@@ -37,7 +37,7 @@ class ZDT1(om.ExplicitComponent):
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
         x = inputs["x"]
         # n=self.options['n_var']
-        n_pop=self.options['n_pop']
+        n_pop=self.options['pop_size']
         mpi=self.options['mpi']
         if mpi is None:
 

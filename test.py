@@ -49,14 +49,14 @@ def test_rastrigin():
     disciplie=Player(optimizer_type='External',optimizer=GA(pop_size=100))
     model=disciplie.model
 
-    rastrigin=Rastrigin(n_var=2,n_pop=100)
+    rastrigin=Rastrigin(n_var=2,pop_size=100)
     model.add_subsystem('ras',rastrigin,promotes=['x','f1'])
 
     model.add_design_var('x',lower=-5.12,upper=5.12)
     model.add_objective('f1')
 
     disciplie.setup()
-    res=disciplie.run_External_driver(termination=('n_gen',1),prophen=np.ones((100,2)))
+    res=disciplie.run_External_driver(termination=('n_gen',100),prophen=np.zeros((100,2)))
 
     x=res.X
     f=res.F

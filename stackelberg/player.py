@@ -335,9 +335,8 @@ class Player(om.Problem):
         # )
 
         while self.optimizer.has_next():
-            
             self.optimizer.next()
-            print(self.optimizer.pop.get('X'))
+            # print(self.optimizer.pop.get('X'))
             
         self.result=self.optimizer.result()
 
