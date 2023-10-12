@@ -49,6 +49,7 @@ class Player(om.Problem):
             self._type = optimizer_type
             self.optimizer = optimizer
         self.result = None
+        self.n_evolutionary=0
         super().__init__(model, driver, comm, name, reports, **options)
 
     def setup(
@@ -327,6 +328,8 @@ class Player(om.Problem):
         #         self.optimizer.initialization.sampling=pop
         #     else:
         #         self.optimizer.initialization.sampling=sampling
+        if restart:
+            self.n_evolutionary=0
         
         if (not restart) and (self.optimizer.is_initialized):
             if prophen is not None:
@@ -367,6 +370,7 @@ class Player(om.Problem):
 
         while self.optimizer.has_next():
             self.optimizer.next()
+            self.n_evolutionary+=1
             # print(self.optimizer.pop.get('X'))
             
         self.result=self.optimizer.result()
