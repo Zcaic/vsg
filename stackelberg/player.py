@@ -285,7 +285,8 @@ class Player(om.Problem):
         copy_algorithm=True,
         copy_termination=True,
         prophen:np.ndarray=None,
-        sampling=FloatRandomSampling,
+        sampling=FloatRandomSampling(),
+        restart=False,
         **kwargs
     ):
         """
@@ -313,18 +314,48 @@ class Player(om.Problem):
         prophen : None | np.ndarray (two-dimensional)
             Prior knowledge
         """
-        if prophen is not None:
-            prophen=np.unique(prophen,axis=0)
-            pop_size=self.optimizer.pop_size
-            pop=Population.new(X=prophen)
-            if len(pop)<pop_size:
-                pop_rest=sampling()(self.udp,pop_size)
-                pop=Population.merge(pop,pop_rest)
-                pop=pop[:pop_size]
+        # if restart:
+        #     if prophen is not None:
+        #         prophen=np.unique(prophen,axis=0)
+        #         pop_size=self.optimizer.pop_size
+        #         pop=Population.new(X=prophen)
+        #         if len(pop)<pop_size:
+        #             pop_rest=sampling(self.udp,pop_size)
+        #             pop=Population.merge(pop,pop_rest)
+        #             pop=pop[:pop_size]
 
+        #         self.optimizer.initialization.sampling=pop
+        #     else:
+        #         self.optimizer.initialization.sampling=sampling
+        
+        if (not restart) and (self.optimizer.is_initialized):
+            if prophen is not None:
+                prophen=np.unique(prophen,axis=0)
+                pop_size=self.optimizer.pop_size
+                pop=Population.new(X=prophen)
+                if len(pop)<pop_size:
+                    pop_rest=self.optimizer.pop.get('X')
+                    pop=Population.merge(pop,pop_rest)
+                    pop=pop[:pop_size]
+            else:
+                pop=self.optimizer.pop.get('X')
             self.optimizer.initialization.sampling=pop
+        else:
+            if prophen is not None:
+                prophen=np.unique(prophen,axis=0)
+                pop_size=self.optimizer.pop_size
+                pop=Population.new(X=prophen)
+                if len(pop)<pop_size:
+                    pop_rest=sampling(self.udp,pop_size)
+                    pop=Population.merge(pop,pop_rest)
+                    pop=pop[:pop_size]
+
+                self.optimizer.initialization.sampling=pop
+            else:
+                self.optimizer.initialization.sampling=sampling
 
         self.optimizer.setup(problem=self.udp, termination=termination)
+        self.optimizer.is_initialized=False
         # self.result = minimize(
         #     problem=...,
         #     algorithm=self.optimizer,
