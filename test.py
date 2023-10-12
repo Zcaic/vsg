@@ -56,19 +56,20 @@ def test_rastrigin():
     model.add_objective('f1')
 
     disciplie.setup()
-    res=disciplie.run_External_driver(termination=('n_gen',5),prophen=np.zeros((100,2)))
+    res=disciplie.run_External_driver(termination=('n_gen',200),savehistory=True)
 
-    x=res.X
-    f=res.F
-    print(x)
-    print(f)
-
-    res=disciplie.run_External_driver(termination=('n_gen',5),prophen=np.ones((100,2)),restart=False)
-
-    x=res.X
-    f=res.F
-    print(x)
-    print(f)
+    his=disciplie.history
+    X=his['X']
+    F=his['F']
+    F=[i[0] for i in F]
+    fig=plt.figure(0,layout='constrained')
+    ax=fig.add_subplot(111)
+    ax.plot(np.arange(len(F)),F,'r-')
+    plt.show()
+    # x=res.X
+    # f=res.F
+    # print(x)
+    # print(f)
 
 if __name__=='__main__':
     test_rastrigin()

@@ -50,6 +50,10 @@ class Player(om.Problem):
             self.optimizer = optimizer
         self.result = None
         self.n_evolutionary=0
+        self.history={}
+        self.history['X']=[]
+        self.history['F']=[]
+
         super().__init__(model, driver, comm, name, reports, **options)
 
     def setup(
@@ -288,6 +292,7 @@ class Player(om.Problem):
         prophen:np.ndarray=None,
         sampling=FloatRandomSampling(),
         restart=False,
+        savehistory=False,
         **kwargs
     ):
         """
@@ -367,11 +372,17 @@ class Player(om.Problem):
         #     copy_termination=copy_termination,
         #     **kwargs
         # )
-
-        while self.optimizer.has_next():
-            self.optimizer.next()
-            self.n_evolutionary+=1
-            # print(self.optimizer.pop.get('X'))
+        if savehistory:
+            while self.optimizer.has_next():
+                self.optimizer.next()
+                self.n_evolutionary+=1
+                self.history['X'].append(self.optimizer.pop.get('X'))
+                self.history['F'].append(self.optimizer.pop.get('F'))
+        else:
+            while self.optimizer.has_next():
+                self.optimizer.next()
+                self.n_evolutionary+=1
+                # print(self.optimizer.pop.get('X'))
             
         self.result=self.optimizer.result()
 
