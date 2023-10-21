@@ -88,6 +88,9 @@ class Player(om.Problem):
             local_vector_class,
             derivatives,
         )
+        self.setup_external_optimizer()
+
+    def setup_external_optimizer(self):
         if self._type == "External" and self.optimizer is not None:
             design_vars, ndesvar, desvar_index, lb, ub = self._get_design_info()
             objv, nobjv, objv_index = self._get_objv_info()
@@ -148,6 +151,7 @@ class Player(om.Problem):
                 {"__init__": init, "_evaluate": evaluate},
             )
             self.udp = Myproblem()
+
 
     def _get_design_info(self):
         design_vars: dict = self.model.get_design_vars()
@@ -341,6 +345,10 @@ class Player(om.Problem):
             # TODO
 
         return opt_res
+        
+    # def update_External_optimizer(self,optimizer):
+    #     self.optimizer=optimizer
+    #     self.setup_external_optimizer()
 
     def run_External_driver(
         self,
@@ -391,66 +399,69 @@ class Player(om.Problem):
         #         self.optimizer.initialization.sampling=pop
         #     else:
         #         self.optimizer.initialization.sampling=sampling
-        if restart:
-            self.n_evolutionary = 0
-
-        if (not restart) and (self.optimizer.is_initialized):
-            if prophen is not None:
-                prophen = np.unique(prophen, axis=0)
-                pop_size = self.optimizer.pop_size
-                pop = Population.new(X=prophen)
-                if len(pop) < pop_size:
-                    pop_rest = self.optimizer.pop.get("X")
-                    pop = Population.merge(pop, pop_rest)
-                    pop = pop[:pop_size]
-            else:
-                pop = self.optimizer.pop.get("X")
-            self.optimizer.initialization.sampling = pop
+        if self.optimizer is None:
+            raise ValueError('Please offer a optimizer')
         else:
-            if prophen is not None:
-                prophen = np.unique(prophen, axis=0)
-                pop_size = self.optimizer.pop_size
-                pop = Population.new(X=prophen)
-                if len(pop) < pop_size:
-                    pop_rest = sampling(self.udp, pop_size)
-                    pop = Population.merge(pop, pop_rest)
-                    pop = pop[:pop_size]
+            if restart:
+                self.n_evolutionary = 0
 
+            if (not restart) and (self.optimizer.is_initialized):
+                if prophen is not None:
+                    prophen = np.unique(prophen, axis=0)
+                    pop_size = self.optimizer.pop_size
+                    pop = Population.new(X=prophen)
+                    if len(pop) < pop_size:
+                        pop_rest = self.optimizer.pop.get("X")
+                        pop = Population.merge(pop, pop_rest)
+                        pop = pop[:pop_size]
+                else:
+                    pop = self.optimizer.pop.get("X")
                 self.optimizer.initialization.sampling = pop
             else:
-                self.optimizer.initialization.sampling = sampling
+                if prophen is not None:
+                    prophen = np.unique(prophen, axis=0)
+                    pop_size = self.optimizer.pop_size
+                    pop = Population.new(X=prophen)
+                    if len(pop) < pop_size:
+                        pop_rest = sampling(self.udp, pop_size)
+                        pop = Population.merge(pop, pop_rest)
+                        pop = pop[:pop_size]
 
-        self.optimizer.setup(
-            problem=self.udp,
-            termination=termination,
-            copy_algorithm=copy_algorithm,
-            copy_termination=copy_termination,
-        )
-        self.optimizer.is_initialized = False
-        # self.result = minimize(
-        #     problem=...,
-        #     algorithm=self.optimizer,
-        #     copy_algorithm=copy_algorithm,
+                    self.optimizer.initialization.sampling = pop
+                else:
+                    self.optimizer.initialization.sampling = sampling
 
-        #     copy_termination=copy_termination,
-        #     **kwargs
-        # )
-        if savehistory:
-            while self.optimizer.has_next():
-                self.optimizer.next()
-                self.n_evolutionary += 1
-                # self.history["X"].append(self.optimizer.pop.get("X"))
-                # self.history["F"].append(self.optimizer.pop.get("F"))
-                self.history.popX.append(np.atleast_2d(self.optimizer.pop.get("X")))
-                self.history.popF.append(np.atleast_2d(self.optimizer.pop.get("F")))
-                self.history.optX.append(np.atleast_2d(self.optimizer.opt.get("X")))
-                self.history.optF.append(np.atleast_2d(self.optimizer.opt.get("F")))
-        else:
-            while self.optimizer.has_next():
-                self.optimizer.next()
-                self.n_evolutionary += 1
-                # print(self.optimizer.pop.get('X'))
+            self.optimizer.setup(
+                problem=self.udp,
+                termination=termination,
+                copy_algorithm=copy_algorithm,
+                copy_termination=copy_termination,
+            )
+            self.optimizer.is_initialized = False
+            # self.result = minimize(
+            #     problem=...,
+            #     algorithm=self.optimizer,
+            #     copy_algorithm=copy_algorithm,
 
-        self.result = self.optimizer.result()
+            #     copy_termination=copy_termination,
+            #     **kwargs
+            # )
+            if savehistory:
+                while self.optimizer.has_next():
+                    self.optimizer.next()
+                    self.n_evolutionary += 1
+                    # self.history["X"].append(self.optimizer.pop.get("X"))
+                    # self.history["F"].append(self.optimizer.pop.get("F"))
+                    self.history.popX.append(np.atleast_2d(self.optimizer.pop.get("X")))
+                    self.history.popF.append(np.atleast_2d(self.optimizer.pop.get("F")))
+                    self.history.optX.append(np.atleast_2d(self.optimizer.opt.get("X")))
+                    self.history.optF.append(np.atleast_2d(self.optimizer.opt.get("F")))
+            else:
+                while self.optimizer.has_next():
+                    self.optimizer.next()
+                    self.n_evolutionary += 1
+                    # print(self.optimizer.pop.get('X'))
 
-        return self.result
+            self.result = self.optimizer.result()
+
+            return self.result
