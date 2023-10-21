@@ -1,4 +1,5 @@
 from typing import Literal
+from typing_extensions import runtime
 import numpy as np
 
 # from mpire import WorkerPool
@@ -11,6 +12,7 @@ from openmdao.vectors.petsc_vector import PETScVector
 
 from pymoo.core.algorithm import Algorithm
 from pymoo.core.problem import Problem
+
 # from pymoo.optimize import minimize
 from pymoo.operators.sampling.rnd import FloatRandomSampling
 from pymoo.operators.sampling.lhs import LHS
@@ -20,9 +22,18 @@ from pymoo.core.population import Population
 INF = 1.0e30
 
 
+class History:
+    def __init__(self) -> None:
+        self.popX = []
+        self.popF = []
+        self.optX = []
+        self.optF = []
+
+
 class Player(om.Problem):
     def __init__(
         self,
+        tag: str,
         optimizer_type: Literal["External", "Internal"] = "External",
         optimizer: Algorithm = None,
         model=None,
@@ -49,10 +60,12 @@ class Player(om.Problem):
             self._type = optimizer_type
             self.optimizer = optimizer
         self.result = None
-        self.n_evolutionary=0
-        self.history={}
-        self.history['X']=[]
-        self.history['F']=[]
+        self.n_evolutionary = 0
+        # self.history = {}
+        # self.history["X"] = []
+        # self.history["F"] = []
+        self.history = History()
+        self.tag = tag
 
         super().__init__(model, driver, comm, name, reports, **options)
 
@@ -147,6 +160,13 @@ class Player(om.Problem):
             for k, v in design_vars.items():
                 src_name = v["source"]
                 npop, nvar = self.model._get_var_meta(src_name, "shape")
+                idxs = v["indices"]
+                if idxs is not None:
+                    idxs = idxs._arr
+                else:
+                    idxs = slice(None)
+                var = np.arange(nvar)[idxs]
+                nvar = len(var)
                 # size = v["size"]
                 desvar_index[k] = (ndesvar, ndesvar + nvar)
                 ndesvar += nvar
@@ -171,6 +191,13 @@ class Player(om.Problem):
             for k, v in objv.items():
                 src_name = v["source"]
                 npop, no = self.model._get_var_meta(src_name, "shape")
+                idxs = v["indices"]
+                if idxs is not None:
+                    idxs = idxs._arr
+                else:
+                    idxs = slice(None)
+                no = np.arange(no)[idxs]
+                no = len(no)
                 # size = v["size"]
                 objv_index[k] = (nobjv, nobjv + no)
                 nobjv += no
@@ -192,7 +219,12 @@ class Player(om.Problem):
             for k, v in cons.items():
                 src_name = v["source"]
                 _, size = self.model._get_var_meta(src_name, "shape")
-
+                if idxs is not None:
+                    idxs = idxs._arr
+                else:
+                    idxs = slice(None)
+                size = np.arange(size)[idxs]
+                size = len(size)
                 if v["equals"] is not None:
                     eq_index[k] = (neq, neq + size)
                     neq += size
@@ -276,22 +308,48 @@ class Player(om.Problem):
 
         desvar = self.model._abs_get_val(src_name)
         loc_idxs = meta["indices"]
-        loc_idxs = slice(loc_idxs)
-        desvar[loc_idxs] = np.atleast_1d(value)
+        if loc_idxs is not None:
+            loc_idxs = loc_idxs._arr
+        else:
+            loc_idxs = slice(None)
+        desvar[:, loc_idxs] = value
 
         if not meta["total_scaler"] is None:
-            desvar[loc_idxs] *= 1.0 / meta["total_scaler"]
+            desvar[:,loc_idxs] *= 1.0 / meta["total_scaler"]
         if not meta["total_adder"] is None:
-            desvar[loc_idxs] -= meta["total_adder"]
+            desvar[:,loc_idxs] -= meta["total_adder"]
+
+        # print(self.get_val('x')[:5])
+        # return
+
+    def set_srcval(self, name, value, indices=slice(None)):
+        src_name = self.model.get_source(name)
+        setted_val = self.model._abs_get_val(src_name)
+        setted_val[:, indices] = value
+
+        # print(self.get_val('x'))
+        # return
+
+    @property
+    def opt(self):
+        opt_res = {}
+        if self.optimizer.problem.n_obj == 1:
+            opt_res["X"] = self.result.X
+            opt_res["F"] = self.result.F
+        else:
+            raise RuntimeError("Now it dose not support Multi-objective problem!")
+            # TODO
+
+        return opt_res
 
     def run_External_driver(
         self,
         termination=None,
         copy_algorithm=True,
         copy_termination=True,
-        prophen:np.ndarray=None,
+        prophen: np.ndarray = None,
         sampling=FloatRandomSampling(),
-        restart=False,
+        restart=True,
         savehistory=False,
         **kwargs
     ):
@@ -334,36 +392,41 @@ class Player(om.Problem):
         #     else:
         #         self.optimizer.initialization.sampling=sampling
         if restart:
-            self.n_evolutionary=0
-        
+            self.n_evolutionary = 0
+
         if (not restart) and (self.optimizer.is_initialized):
             if prophen is not None:
-                prophen=np.unique(prophen,axis=0)
-                pop_size=self.optimizer.pop_size
-                pop=Population.new(X=prophen)
-                if len(pop)<pop_size:
-                    pop_rest=self.optimizer.pop.get('X')
-                    pop=Population.merge(pop,pop_rest)
-                    pop=pop[:pop_size]
+                prophen = np.unique(prophen, axis=0)
+                pop_size = self.optimizer.pop_size
+                pop = Population.new(X=prophen)
+                if len(pop) < pop_size:
+                    pop_rest = self.optimizer.pop.get("X")
+                    pop = Population.merge(pop, pop_rest)
+                    pop = pop[:pop_size]
             else:
-                pop=self.optimizer.pop.get('X')
-            self.optimizer.initialization.sampling=pop
+                pop = self.optimizer.pop.get("X")
+            self.optimizer.initialization.sampling = pop
         else:
             if prophen is not None:
-                prophen=np.unique(prophen,axis=0)
-                pop_size=self.optimizer.pop_size
-                pop=Population.new(X=prophen)
-                if len(pop)<pop_size:
-                    pop_rest=sampling(self.udp,pop_size)
-                    pop=Population.merge(pop,pop_rest)
-                    pop=pop[:pop_size]
+                prophen = np.unique(prophen, axis=0)
+                pop_size = self.optimizer.pop_size
+                pop = Population.new(X=prophen)
+                if len(pop) < pop_size:
+                    pop_rest = sampling(self.udp, pop_size)
+                    pop = Population.merge(pop, pop_rest)
+                    pop = pop[:pop_size]
 
-                self.optimizer.initialization.sampling=pop
+                self.optimizer.initialization.sampling = pop
             else:
-                self.optimizer.initialization.sampling=sampling
+                self.optimizer.initialization.sampling = sampling
 
-        self.optimizer.setup(problem=self.udp, termination=termination)
-        self.optimizer.is_initialized=False
+        self.optimizer.setup(
+            problem=self.udp,
+            termination=termination,
+            copy_algorithm=copy_algorithm,
+            copy_termination=copy_termination,
+        )
+        self.optimizer.is_initialized = False
         # self.result = minimize(
         #     problem=...,
         #     algorithm=self.optimizer,
@@ -375,15 +438,19 @@ class Player(om.Problem):
         if savehistory:
             while self.optimizer.has_next():
                 self.optimizer.next()
-                self.n_evolutionary+=1
-                self.history['X'].append(self.optimizer.pop.get('X'))
-                self.history['F'].append(self.optimizer.pop.get('F'))
+                self.n_evolutionary += 1
+                # self.history["X"].append(self.optimizer.pop.get("X"))
+                # self.history["F"].append(self.optimizer.pop.get("F"))
+                self.history.popX.append(np.atleast_2d(self.optimizer.pop.get("X")))
+                self.history.popF.append(np.atleast_2d(self.optimizer.pop.get("F")))
+                self.history.optX.append(np.atleast_2d(self.optimizer.opt.get("X")))
+                self.history.optF.append(np.atleast_2d(self.optimizer.opt.get("F")))
         else:
             while self.optimizer.has_next():
                 self.optimizer.next()
-                self.n_evolutionary+=1
+                self.n_evolutionary += 1
                 # print(self.optimizer.pop.get('X'))
-            
-        self.result=self.optimizer.result()
+
+        self.result = self.optimizer.result()
 
         return self.result

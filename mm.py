@@ -1,7 +1,10 @@
 import numpy as np
 
-a=np.array([1,0,2])
-print(a>0)
+x=np.ones((3,3))
+index=np.array([1,2])
+index=(slice(None),index)
+y=x[index]
+print(y)
 
     
 
