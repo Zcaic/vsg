@@ -1,14 +1,17 @@
 from typing import Literal
 from typing_extensions import runtime
 import numpy as np
+import pickle
 
 # from mpire import WorkerPool
 
 import openmdao.api as om
 from openmdao.core.constants import _UNDEFINED
-from openmdao.core.problem import PETScVector
+
+# from openmdao.core.problem import PETScVector
 from openmdao.vectors.default_vector import DefaultVector
-from openmdao.vectors.petsc_vector import PETScVector
+
+# from openmdao.vectors.petsc_vector import PETScVector
 
 from pymoo.core.algorithm import Algorithm
 from pymoo.core.problem import Problem
@@ -41,7 +44,7 @@ class Player(om.Problem):
         comm=None,
         name=None,
         reports=None,
-        **options
+        **options,
     ):
         """Nash Player.
 
@@ -75,8 +78,6 @@ class Player(om.Problem):
         logger=None,
         mode="auto",
         force_alloc_complex=False,
-        distributed_vector_class=PETScVector,
-        local_vector_class=DefaultVector,
         derivatives=True,
     ):
         super().setup(
@@ -84,8 +85,6 @@ class Player(om.Problem):
             logger,
             mode,
             force_alloc_complex,
-            distributed_vector_class,
-            local_vector_class,
             derivatives,
         )
         self.setup_external_optimizer()
@@ -140,9 +139,9 @@ class Player(om.Problem):
                 G, H = self.get_cons(eq_info, lower_info, upper_info)
 
                 out["F"] = F
-                if G:
+                if len(G):
                     out["G"] = G
-                if H:
+                if len(H):
                     out["H"] = H
 
             Myproblem = type(
@@ -151,7 +150,6 @@ class Player(om.Problem):
                 {"__init__": init, "_evaluate": evaluate},
             )
             self.udp = Myproblem()
-
 
     def _get_design_info(self):
         design_vars: dict = self.model.get_design_vars()
@@ -223,6 +221,7 @@ class Player(om.Problem):
             for k, v in cons.items():
                 src_name = v["source"]
                 _, size = self.model._get_var_meta(src_name, "shape")
+                idxs = v["indices"]
                 if idxs is not None:
                     idxs = idxs._arr
                 else:
@@ -319,9 +318,9 @@ class Player(om.Problem):
         desvar[:, loc_idxs] = value
 
         if not meta["total_scaler"] is None:
-            desvar[:,loc_idxs] *= 1.0 / meta["total_scaler"]
+            desvar[:, loc_idxs] *= 1.0 / meta["total_scaler"]
         if not meta["total_adder"] is None:
-            desvar[:,loc_idxs] -= meta["total_adder"]
+            desvar[:, loc_idxs] -= meta["total_adder"]
 
         # print(self.get_val('x')[:5])
         # return
@@ -345,7 +344,7 @@ class Player(om.Problem):
             # TODO
 
         return opt_res
-        
+
     # def update_External_optimizer(self,optimizer):
     #     self.optimizer=optimizer
     #     self.setup_external_optimizer()
@@ -359,7 +358,9 @@ class Player(om.Problem):
         sampling=FloatRandomSampling(),
         restart=True,
         savehistory=False,
-        **kwargs
+        savetopkl=False,
+        pklfile=None,
+        **kwargs,
     ):
         """
         termination : :class:`~pymoo.core.termination.Termination` or tuple
@@ -385,6 +386,13 @@ class Player(om.Problem):
 
         prophen : None | np.ndarray (two-dimensional)
             Prior knowledge
+
+        pklfile : None | str
+            the file name to dump history.
+
+        savetopkl : bool
+            Whether the history should be stored or not with pickel.
+         
         """
         # if restart:
         #     if prophen is not None:
@@ -400,7 +408,7 @@ class Player(om.Problem):
         #     else:
         #         self.optimizer.initialization.sampling=sampling
         if self.optimizer is None:
-            raise ValueError('Please offer a optimizer')
+            raise ValueError("Please offer a optimizer")
         else:
             if restart:
                 self.n_evolutionary = 0
@@ -446,16 +454,22 @@ class Player(om.Problem):
             #     copy_termination=copy_termination,
             #     **kwargs
             # )
-            if savehistory:
+            if savehistory or savetopkl:
                 while self.optimizer.has_next():
                     self.optimizer.next()
                     self.n_evolutionary += 1
                     # self.history["X"].append(self.optimizer.pop.get("X"))
                     # self.history["F"].append(self.optimizer.pop.get("F"))
-                    self.history.popX.append(np.atleast_2d(self.optimizer.pop.get("X")))
-                    self.history.popF.append(np.atleast_2d(self.optimizer.pop.get("F")))
-                    self.history.optX.append(np.atleast_2d(self.optimizer.opt.get("X")))
-                    self.history.optF.append(np.atleast_2d(self.optimizer.opt.get("F")))
+                    self.history.popX.append(self.optimizer.pop.get("X"))
+                    self.history.popF.append(self.optimizer.pop.get("F"))
+                    self.history.optX.append(self.optimizer.opt.get("X"))
+                    self.history.optF.append(self.optimizer.opt.get("F"))
+
+                    if savetopkl:
+                        if pklfile is None:
+                            pklfile = f"{self.tag}_history.pkl"
+                        with open(pklfile, "wb") as fout:
+                            pickle.dump(self.history, fout)
             else:
                 while self.optimizer.has_next():
                     self.optimizer.next()
@@ -465,3 +479,9 @@ class Player(om.Problem):
             self.result = self.optimizer.result()
 
             return self.result
+
+    def __getstate__(self):
+        ...
+
+    def __setstate__(self, state):
+        ...
